@@ -49,3 +49,9 @@ mapWithKey f = go
   where
     go :: Loop2 k a -> Loop2 k b
     go (Loop2 q) = Loop2 $ P.wonkyMap f go q
+
+traverseWithKeyU :: forall f k a b. Applicative f => (k -> a -> f b) -> Loop2 k a -> f (Loop2 k b)
+traverseWithKeyU f = go
+  where
+    go :: Loop2 k a -> f (Loop2 k b)
+    go (Loop2 q) = P.wonkTrav Loop2 f go q

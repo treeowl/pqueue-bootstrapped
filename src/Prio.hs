@@ -1,4 +1,4 @@
-{-# options_ghc -ddump-simpl #-}
+{- options_ghc -ddump-simpl #-}
 module Prio where
 import Prelude hiding (null)
 

@@ -10,7 +10,7 @@ import Prelude hiding (null)
 
 data MinPQueue k a
   = Empty
-  | Full !Int !k a !(Loop2 k a)
+  | Full !Int !k a !(P.Loop2 k a)
 
 -- A Full node stores:
 --
@@ -69,20 +69,8 @@ fromList = Foldable.foldl' (flip (uncurry insert)) empty
 
 mapWithKey :: (k -> a -> b) -> MinPQueue k a -> MinPQueue k b
 mapWithKey _f Empty = Empty
-mapWithKey f (Full sz k a q) = Full sz k (f k a) (coerce (mapLoop2WithKey f) q)
-
-mapLoop2WithKey :: forall k a b. (k -> a -> b) -> Loop2 k a -> Loop2 k b
-mapLoop2WithKey f = go
-  where
-    go :: Loop2 k a -> Loop2 k b
-    go (Loop2 q) = Loop2 $ P.wonkyMap f go q
+mapWithKey f (Full sz k a q) = Full sz k (f k a) (coerce (P.mapWithKey f) q)
 
 traverseWithKeyU :: Applicative f => (k -> a -> f b) -> MinPQueue k a -> f (MinPQueue k b)
 traverseWithKeyU _f Empty = pure Empty
-traverseWithKeyU f (Full sz k a q) = liftA2 (\b (Loop2 q') -> Full sz k b q') (f k a) (traverseLoop2WithKeyU f (Loop2 q))
-
-traverseLoop2WithKeyU :: forall f k a b. Applicative f => (k -> a -> f b) -> Loop2 k a -> f (Loop2 k b)
-traverseLoop2WithKeyU f = go
-  where
-    go :: Loop2 k a -> f (Loop2 k b)
-    go (Loop2 q) = P.wonkTrav Loop2 f go q
+traverseWithKeyU f (Full sz k a q) = liftA2 (\b q' -> Full sz k b q') (f k a) (P.traverseWithKeyU f q)

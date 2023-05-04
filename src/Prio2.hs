@@ -1,4 +1,4 @@
-{-# options_ghc -ddump-simpl #-}
+{- options_ghc -ddump-simpl #-}
 module Prio2 where
 import Prelude hiding (null)
 import Control.Applicative (liftA2)
