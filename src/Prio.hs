@@ -1,6 +1,7 @@
 {- options_ghc -ddump-simpl #-}
 module Prio where
-import Prelude hiding (null)
+import Prelude hiding (map, null)
+import qualified Data.Foldable as Foldable
 
 data Tree rk k a = Tree !k !(rk k a)
 data Forest rk k a
@@ -111,7 +112,6 @@ size (MinPQ hp) = go 0 1 hp
     go acc rk (Skip f) = go acc (2 * rk) f
     go acc rk (Cons _t f) = go (acc + rk) (2 * rk) f
 
-
 data Extract rk k a = Extract !k (rk k a) !(Forest rk k a)
 data MExtract rk k a = No | Yes {-# UNPACK #-} !(Extract rk k a)
 
@@ -182,3 +182,100 @@ mapWithKey f = \(MinPQ q) -> MinPQ $ go Zeroy q
     goRk :: k -> Ranky rk -> rk k a -> rk k b
     goRk !k Zeroy (Zero a) = Zero (f k a)
     goRk !k (Succy rky) (Succ t ts) = Succ (goTree rky t) (goRk k rky ts)
+
+map :: forall k a b. (a -> b) -> MinPQueue k a -> MinPQueue k b
+map f = \(MinPQ q) -> MinPQ $ go Zeroy q
+  where
+    go :: Ranky rk -> Forest rk k a -> Forest rk k b
+    go !_ Nil = Nil
+    go !rky (Skip rest) = Skip $ go (Succy rky) rest
+    go !rky (Cons t rest) = Cons (goTree rky t) (go (Succy rky) rest)
+
+    goTree :: Ranky rk -> Tree rk k a -> Tree rk k b
+    goTree rky (Tree k ts) = Tree k (goRk rky ts)
+    {-# INLINE goTree #-}
+
+    goRk :: Ranky rk -> rk k a -> rk k b
+    goRk Zeroy (Zero a) = Zero (f a)
+    goRk (Succy rky) (Succ t ts) = Succ (goTree rky t) (goRk rky ts)
+
+{-# INLINABLE toList #-}
+toList :: Ord k => MinPQueue k a -> [(k, a)]
+toList q = case minViewWithKey q of
+  Nothing -> []
+  Just ((k, a), q') -> (k, a) : toList q'
+
+instance Ord k => Semigroup (MinPQueue k a) where
+  (<>) = merge
+
+instance Ord k => Monoid (MinPQueue k a) where
+  mempty = empty
+
+instance (Ord k, Show k, Show a) => Show (MinPQueue k a) where
+  showsPrec p = showsPrec p . toList
+
+-- | Convert from a list.
+fromList :: Ord k => [(k, a)] -> MinPQueue k a
+fromList xs = Foldable.foldl' (\acc (k, a) -> insertEager k a acc) empty xs
+
+-- | Insert a key known to be at least as small as any in the queue. Warning:
+-- this function both requires and maintains an additional data structure
+-- invariant. It is safe to use this function to build up from an empty or
+-- singleton queue, but it should not be used on an arbitrary queue.
+insertMinQ :: k -> a -> MinPQueue k a -> MinPQueue k a
+-- Additional invariant: the roots of the binomial trees are in increasing
+-- order.
+insertMinQ k a (MinPQ q) = MinPQ $ insertMinQF (tip k a) q
+
+insertMinQF :: Tree rk k a -> Forest rk k a -> Forest rk k a
+insertMinQF !t Nil = Cons t Nil
+insertMinQF !t (Skip f) = Cons t f
+insertMinQF (Tree k ts) (Cons t f) = Skip $! insertMinQF (Tree k (Succ t ts)) f
+
+-- | Insert a key known to be at least as great as any in the queue. Warning:
+-- this function both requires and maintains an additional data structure
+-- invariant. It is safe to use this function to build up from an empty or
+-- singleton queue, but it should not be used on an arbitrary queue.
+insertMaxQ :: k -> a -> MinPQueue k a -> MinPQueue k a
+-- Additional invariant: the roots of the binomial trees are in decreasing
+-- order.
+insertMaxQ k a (MinPQ q) = MinPQ $ insertMaxQF (tip k a) q
+
+insertMaxQF :: Tree rk k a -> Forest rk k a -> Forest rk k a
+insertMaxQF !t Nil = Cons t Nil
+insertMaxQF !t (Skip f) = Cons t f
+insertMaxQF t (Cons (Tree k ts) f) = Skip (insertMaxQF (Tree k (Succ t ts)) f)
+
+fromAscList :: [(k,a)] -> MinPQueue k a
+fromAscList = Foldable.foldl' (\acc (k, a) -> insertMaxQEager k a acc) empty
+
+fromDescList :: [(k,a)] -> MinPQueue k a
+fromDescList = Foldable.foldl' (\acc (k, a) -> insertMinQEager k a acc) empty
+
+-- | Insert a key known to be at least as great as any in the queue. Warning:
+-- this function both requires and maintains an additional data structure
+-- invariant. It is safe to use this function to build up from an empty or
+-- singleton queue, but it should not be used on an arbitrary queue.
+insertMaxQEager :: k -> a -> MinPQueue k a -> MinPQueue k a
+-- Additional invariant: the roots of the binomial trees are in decreasing
+-- order.
+insertMaxQEager k a (MinPQ q) = MinPQ $ insertMaxQFEager (tip k a) q
+
+insertMaxQFEager :: Tree rk k a -> Forest rk k a -> Forest rk k a
+insertMaxQFEager !t Nil = Cons t Nil
+insertMaxQFEager !t (Skip f) = Cons t f
+insertMaxQFEager t (Cons (Tree k ts) f) = Skip $! insertMaxQFEager (Tree k (Succ t ts)) f
+
+-- | Insert a key known to be at least as small as any in the queue. Warning:
+-- this function both requires and maintains an additional data structure
+-- invariant. It is safe to use this function to build up from an empty or
+-- singleton queue, but it should not be used on an arbitrary queue.
+insertMinQEager :: k -> a -> MinPQueue k a -> MinPQueue k a
+-- Additional invariant: the roots of the binomial trees are in increasing
+-- order.
+insertMinQEager k a (MinPQ q) = MinPQ $ insertMinQFEager (tip k a) q
+
+insertMinQFEager :: Tree rk k a -> Forest rk k a -> Forest rk k a
+insertMinQFEager !t Nil = Cons t Nil
+insertMinQFEager !t (Skip f) = Cons t f
+insertMinQFEager (Tree k ts) (Cons t f) = Skip $! insertMinQFEager (Tree k (Succ t ts)) f
